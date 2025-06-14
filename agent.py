@@ -4,6 +4,7 @@ from langchain.agents import create_react_agent, AgentExecutor
 # from langchain import hub
 from tools.react_prompt_template import get_prompt_template
 from tools.pdf_query_tools import faqs_budget_2025_pdf_query, finance_bill_2025_pdf_query
+from tools.web_search_query_tools import search_tax_sites
 import warnings
 
 
@@ -16,7 +17,7 @@ def agent(query: str):
 
     # query = input("Enter your query: ")
 
-    tools = [faqs_budget_2025_pdf_query, finance_bill_2025_pdf_query]
+    tools = [faqs_budget_2025_pdf_query, finance_bill_2025_pdf_query, search_tax_sites]
 
     prompt_template = get_prompt_template()
 

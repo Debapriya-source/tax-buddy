@@ -69,4 +69,5 @@ dependencies = [
     "typing-inspect>=0.9.0",
     "tzdata>=2025.2",
     "urllib3>=2.4.0",
+    "bs4>=0.0.2",
 ]
