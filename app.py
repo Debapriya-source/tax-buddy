@@ -326,7 +326,7 @@ if prompt := st.chat_input("What is your query?"):
     print(f"enhanced_queries: {enhanced_queries}")
 
     # Store the user message and enhanced queries
-    user_message = HumanMessage(content=f"Please use proper quotations from the PDFs when crafting your answer. prompt: {prompt}\n\n" +
+    user_message = HumanMessage(content=f"Please use proper quotations (such as any section no. or specific lines etc.) from the PDFs when crafting your answer (references should be strictly from the PDFs only). prompt: {prompt}\n\n" +
                                      f"enhanced_queries: {enhanced_queries}")
     store.append(HumanMessage(content=prompt))
 
