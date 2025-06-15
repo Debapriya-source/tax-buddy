@@ -6,7 +6,7 @@ def get_prompt_template():
         """
             System: |
             "You are an intelligent agent that alternates between reasoning (Thought) "
-            "and executing actions (Action).
+            "and executing actions (Action)."
             "STOP when you reach a final answer"
             "If you consider re-using a tool on the same input, rethink instead of repeating."
             Tools:

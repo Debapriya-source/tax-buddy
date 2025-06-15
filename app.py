@@ -86,7 +86,7 @@ if prompt := st.chat_input("What is your query?"):
     print(f"Enhanced Queries: {enhanced_queries}")
 
     st.write("🔍 Processing enhanced query...")
-    final_user_query = f"user_prompt: {prompt}\n\nenhanced_queries: {enhanced_queries}. Please use proper quotations (such as any section no. or specific lines etc.) from the PDFs when crafting your answer (references should be strictly from the PDFs only). Add a proper disclaimer in the final response only."
+    final_user_query = f"user_prompt: {prompt}\n\nenhanced_queries: {enhanced_queries}."
 
     # Cache responses
     query_hash = hashlib.md5(final_user_query.encode()).hexdigest()

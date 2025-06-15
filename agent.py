@@ -74,7 +74,11 @@ def agent(query: str) -> tuple[str, str]:
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
         try:
-            result = executor.invoke({"input": query})
+            instructions = """
+                Use proper quotations (such as any section no. or specific lines or urls etc.) from the PDFs or websites while crafting your final answer (references should be strictly from the PDFs and the provided URLs only).
+                Add a proper disclaimer in the final response only.
+                """
+            result = executor.invoke({"input": query, "instructions": {instructions}})
         except Exception:
             logging.exception("AgentExecutor.invoke failed")
             result = {"output": "", "intermediate_steps": []}
