@@ -8,6 +8,8 @@ from langchain_groq import ChatGroq
 from langchain.agents import create_react_agent, AgentExecutor
 from langchain.callbacks.manager import CallbackManager
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
+from langchain_core.messages import BaseMessage
+from typing import List
 
 from tools.react_prompt_template import get_prompt_template
 from tools.pdf_query_tools import (
@@ -15,6 +17,7 @@ from tools.pdf_query_tools import (
     finance_bill_2025_pdf_query,
 )
 from tools.web_search_query_tools import search_tax_websites
+from tools.chat_history_tool import create_chat_history_tool
 
 
 def fallback_chat(
@@ -22,13 +25,14 @@ def fallback_chat(
 ) -> str:
     """Continue from partial thoughts on a cheaper/fallback model."""
     llm = ChatGroq(model=fallback_model, temperature=0.1)
+
     messages = [
         {"role": "system", "content": "You are a fallback tax assistant."},
         {"role": "system", "content": f"Original query: {query}"},
         {"role": "system", "content": f"Partial reasoning so far:\n{thoughts}"},
         {
             "role": "user",
-            "content": "Based on the above, give a final answer with proper reference(from the partial thoughts) and disclaimer.",
+            "content": "Based on the above, give a final answer with proper references(from the partial thoughts) and disclaimer.",
         },
     ]
     try:
@@ -43,17 +47,24 @@ def fallback_chat(
         return f"⚠️ Sorry, even the fallback failed: {err}"
 
 
-def agent(query: str) -> tuple[str, str]:
+def agent(query: str, chat_history: List[BaseMessage] = None) -> tuple[str, str]:
     warnings.filterwarnings("ignore", category=FutureWarning)
 
     # — Primary LLM & tools setup —
-    # llm = ChatGroq(model="qwen-qwq-32b")
     llm = ChatGroq(model="deepseek-r1-distill-llama-70b")
+
+    # Create tools including chat history lookup
     tools = [
         faqs_budget_2025_pdf_query,
         finance_bill_2025_pdf_query,
         search_tax_websites,
     ]
+
+    # Add chat history tool if history exists
+    if chat_history:
+        chat_history_tool = create_chat_history_tool(chat_history)
+        tools.append(chat_history_tool)
+
     prompt = get_prompt_template()
     react_agent = create_react_agent(llm, tools, prompt)
 
@@ -66,7 +77,7 @@ def agent(query: str) -> tuple[str, str]:
         verbose=True,
         handle_parsing_errors="pass",
         early_stopping_method="force",  # force returns a string
-        max_iterations=5,
+        max_iterations=6,  # Increased to allow for chat history lookup
         callback_manager=cb_manager,
     )
 
@@ -75,10 +86,25 @@ def agent(query: str) -> tuple[str, str]:
     with contextlib.redirect_stdout(buf):
         try:
             instructions = """
-                Use proper quotations (such as any section no. or specific lines or urls etc.) from the PDFs or websites while crafting your final answer (references should be strictly from the PDFs and the provided URLs only).
-                Add a proper disclaimer in the final response only.
+                You are a tax assistant with access to tax documents and chat history.
+                
+                IMPORTANT: If the user's question seems to reference previous conversation 
+                (uses words like "that", "it", "previous", "earlier", "above", or asks follow-up questions),
+                use the chat_history_lookup tool to get context before answering.
+                
+                Examples of when to use chat_history_lookup:
+                - "Tell me more about that"
+                - "What about the previous question?"
+                - "Can you explain it further?"
+                - "What did you say about deductions?"
+                - Any question that lacks clear context
+                
+                Instructions:
+                - Provide proper facts and references (section numbers, specific lines, URLs) from PDFs/websites
+                - Add a proper disclaimer in the final response
+                - If using chat history, acknowledge the previous context in your response
                 """
-            result = executor.invoke({"input": query, "instructions": {instructions}})
+            result = executor.invoke({"input": query, "instructions": instructions})
         except Exception:
             logging.exception("AgentExecutor.invoke failed")
             result = {"output": "", "intermediate_steps": []}
@@ -93,9 +119,9 @@ def agent(query: str) -> tuple[str, str]:
         if not line.lstrip().startswith("Invalid Format:")
     ]
 
-    # — Keep the last 20 meaningful lines as partial reasoning —
+    # — Keep the last 25 meaningful lines as partial reasoning —
     if clean_lines:
-        partial = "\n".join(clean_lines[-20:])
+        partial = "\n".join(clean_lines[-25:])
     else:
         partial = trace or "No partial reasoning available."
 
@@ -116,8 +142,6 @@ def agent(query: str) -> tuple[str, str]:
     # 2) Extract all thought‐blocks into a list
     m = think_pat.search(final)
     thoughts = m.group(1).strip() if m else ""
-
-    # ['\nHere are some private thoughts\nover multiple lines.\n', 'One more thought.']
 
     # 3) Strip out those blocks (tags+content) from the raw text
     clean_text = think_pat.sub("", final)

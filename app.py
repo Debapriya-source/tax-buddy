@@ -9,7 +9,7 @@ import streamlit as st
 from agent import agent
 from tools.query_enhancer import query_enhancer
 
-# Prevent Streamlit’s watcher from examining torch.classes
+# Prevent Streamlit's watcher from examining torch.classes
 torch.classes.__path__ = []  # or point to a valid folder if needed
 
 # Load environment variables
@@ -44,10 +44,38 @@ st.markdown(initial_msg)
 if "store" not in st.session_state:
     st.session_state.store = []
 
-store = st.session_state.store
+# Add sidebar for chat history management
+with st.sidebar:
+    st.header("Chat History")
+    if st.button("Clear Chat History", type="secondary"):
+        st.session_state.store = []
+        st.rerun()
+
+    # Show chat history count
+    st.write(f"Messages: {len(st.session_state.store)}")
+
+    # Show recent context indicator
+    if len(st.session_state.store) > 0:
+        st.info(
+            "💡 The assistant can now reference previous conversation when you ask follow-up questions!"
+        )
+
+    # Option to download chat history
+    if st.session_state.store:
+        chat_history_text = ""
+        for i, message in enumerate(st.session_state.store):
+            role = "User" if message.type == "human" else "Assistant"
+            chat_history_text += f"{role}: {message.content}\n\n"
+
+        st.download_button(
+            label="Download Chat History",
+            data=chat_history_text,
+            file_name="tax_buddy_chat_history.txt",
+            mime="text/plain",
+        )
 
 # Render chat history
-for message in store:
+for message in st.session_state.store:
     avatar = "👩‍💻" if message.type == "ai" else "🗨️"
     with st.chat_message(message.type, avatar=avatar):
         st.markdown(message.content)
@@ -65,43 +93,60 @@ def cached_query_enhancer(prompt):
 
 
 @st.cache_data(ttl=1800, show_spinner=False)
-def get_cached_response(query_hash, query):
+def get_cached_response(query_hash, query, _chat_history):
     """
     Get cached response for a query, or run the agent if not cached.
+    Note: _chat_history is prefixed with _ to exclude it from hashing
     """
-    answer, partial = agent(query)
+    answer, partial = agent(query, _chat_history)
     return answer, partial
 
 
 # Initialize cached agent
 cached_agent = get_agent()
 
-
 if prompt := st.chat_input("What is your query?"):
+    # Add user message to history immediately
+    st.session_state.store.append(HumanMessage(content=prompt))
+
+    # Display user message
     st.chat_message("user", avatar="🗨️").markdown(prompt)
 
     # Show thoughts for each step
-    st.write("🤔 Enhancing your query...")
-    enhanced_queries = cached_query_enhancer(prompt)
-    print(f"Enhanced Queries: {enhanced_queries}")
+    with st.status("Processing your query...", expanded=True) as status:
+        st.write("🤔 Enhancing your query...")
+        enhanced_queries = cached_query_enhancer(prompt)
+        print(f"Enhanced Queries: {enhanced_queries}")
 
-    st.write("🔍 Processing enhanced query...")
-    final_user_query = f"user_prompt: {prompt}\n\nenhanced_queries: {enhanced_queries}."
+        st.write("🔍 Processing enhanced query...")
 
-    # Cache responses
-    query_hash = hashlib.md5(final_user_query.encode()).hexdigest()
-    st.write("💭 Generating response...")
-    answer, partial = get_cached_response(query_hash, final_user_query)
-    # Manage history size
-    if len(store) >= 20:
-        store = store[-18:]
+        final_user_query = (
+            f"user_prompt: {prompt}\n\nenhanced_queries: {enhanced_queries}."
+        )
+        # Get chat history (excluding the current message)
+        chat_history = st.session_state.store[:-1]  # Exclude the current user message
 
-    store.append(HumanMessage(content=prompt))
+        # Cache responses - create hash without chat history to avoid cache misses
+        query_hash = hashlib.md5(final_user_query.encode()).hexdigest()
+        st.write("💭 Generating response...")
 
-    store.append(AIMessage(content=answer))
+        # Pass chat history to the agent (it will create the lookup tool internally)
+        answer, partial = get_cached_response(
+            query_hash, final_user_query, chat_history
+        )
+
+        status.update(label="Response generated!", state="complete", expanded=False)
+
+    # Limit chat history to 100 messages
+    if len(st.session_state.store) >= 100:
+        st.session_state.store = st.session_state.store[-100:]
+
+    # Add AI response to history
+    st.session_state.store.append(AIMessage(content=answer))
 
     # Show reasoning and response
     with st.expander("Reasoning", expanded=False):
         st.markdown(partial, unsafe_allow_html=True)
-
-    st.chat_message("assistant", avatar="👩‍💻").markdown(answer)
+    # Display assistant response
+    with st.chat_message("assistant", avatar="👩‍💻"):
+        st.markdown(answer)
