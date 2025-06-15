@@ -70,4 +70,5 @@ dependencies = [
     "tzdata>=2025.2",
     "urllib3>=2.4.0",
     "bs4>=0.0.2",
+    "langchain-ollama>=0.3.3",
 ]

@@ -4,8 +4,12 @@ from langchain.prompts import PromptTemplate
 def get_prompt_template():
     return PromptTemplate.from_template(
         """
-            Answer the following questions as best you can. You have access to the following tools:
-
+            System: |
+            "You are an intelligent agent that alternates between reasoning (Thought) "
+            "and executing actions (Action).
+            "STOP when you reach a final answer"
+            "If you consider re-using a tool on the same input, rethink instead of repeating."
+            Tools:
             {tools}
 
             Use the following format:

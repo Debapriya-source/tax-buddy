@@ -29,7 +29,7 @@ def faqs_budget_2025_pdf_query(query: str) -> str:
         db = FAISS.from_texts(texts, embeddings_model)
         db.save_local("db/faiss_index_faqs_budget_2025")
 
-    retriever = db.as_retriever(k=4)
+    retriever = db.as_retriever(k=3)
     result = retriever.invoke(query)
 
     return result
