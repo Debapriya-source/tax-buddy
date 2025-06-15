@@ -1,3 +1,4 @@
+import hashlib
 import torch
 import os
 
@@ -5,7 +6,6 @@ import os
 from langchain_core.messages import HumanMessage, AIMessage
 from dotenv import dotenv_values
 import streamlit as st
-import streamlit.components.v1 as components
 from agent import agent
 from tools.query_enhancer import query_enhancer
 
@@ -52,71 +52,56 @@ for message in store:
     with st.chat_message(message.type, avatar=avatar):
         st.markdown(message.content)
 
+
+# Cached functions at the top
+@st.cache_resource
+def get_agent():
+    return agent
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def cached_query_enhancer(prompt):
+    return query_enhancer(prompt)
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def get_cached_response(query_hash, query):
+    """
+    Get cached response for a query, or run the agent if not cached.
+    """
+    answer, partial = agent(query)
+    return answer, partial
+
+
+# Initialize cached agent
+cached_agent = get_agent()
+
+
 if prompt := st.chat_input("What is your query?"):
-    # 1) Show user message
     st.chat_message("user", avatar="🗨️").markdown(prompt)
 
-    # 2) Blinking “Thinking…” indicator
-    placeholder = st.empty()
-    with placeholder.container():
-        with st.chat_message("assistant", avatar="👩‍💻"):
-            components.html(
-                """
-                <div style="font-weight:bold; font-size:16px; font-family:cursive; color:#555;">
-                  <span class="blinking">Thinking...</span>
-                </div>
-                <style>
-                  .blinking { animation: blink-animation 2.5s ease-in-out infinite; }
-                  @keyframes blink-animation {
-                    0%, 90%, 100% { opacity: 1; }
-                    50% { opacity: 0; }
-                  }
-                </style>
-                """,
-                height=40,
-            )
+    # Show thoughts for each step
+    st.write("🤔 Enhancing your query...")
+    enhanced_queries = cached_query_enhancer(prompt)
+    print(f"Enhanced Queries: {enhanced_queries}")
 
-    # 3) Enhance & store user message
-    # Enhance the query
-    enhanced_queries = query_enhancer(prompt)
-    print(f"enhanced_queries: {enhanced_queries}")
+    st.write("🔍 Processing enhanced query...")
+    final_user_query = f"user_prompt: {prompt}\n\nenhanced_queries: {enhanced_queries}. Please use proper quotations (such as any section no. or specific lines etc.) from the PDFs when crafting your answer (references should be strictly from the PDFs only). Add a proper disclaimer in the final response only."
 
-    # Store the user message and enhanced queries
-    final_user_query = f"Please use proper quotations (such as any section no. or specific lines etc.) from the PDFs when crafting your answer (references should be strictly from the PDFs only). Add a proper disclaimer. prompt: {prompt}\n\nenhanced_queries: {enhanced_queries}."
-    user_message = HumanMessage(content=final_user_query)
+    # Cache responses
+    query_hash = hashlib.md5(final_user_query.encode()).hexdigest()
+    st.write("💭 Generating response...")
+    answer, partial = get_cached_response(query_hash, final_user_query)
+    # Manage history size
+    if len(store) >= 20:
+        store = store[-18:]
+
     store.append(HumanMessage(content=prompt))
 
-    # 4) Call agent() and unpack final answer + partial reasoning
-    answer, partial = agent(final_user_query)
-
-    print(f"Final answer: {answer}")
-    print(f"Partial reasoning: {partial}")
-
-    # 5) Remove blinking
-    placeholder.empty()
-
-    # 6) Show partial thoughts as Markdown inside the expander
-
-    with st.expander("Reasoning", expanded=False):
-        # 1) Scoped CSS for only this expander
-        st.markdown(
-            """
-            <style>
-            /* Only target elements inside this expander */
-            .streamlit-expanderContent .md-container h3 {
-                color: #2E86AB;
-                margin-bottom: 0.25em;
-            }
-            .streamlit-expanderContent .md-container p {
-                font-style: italic;
-                margin-top: 0.5em;
-            }
-            </style>
-            """
-            + partial,
-            unsafe_allow_html=True,
-        )
-
-    # 7) Store & display final answer
     store.append(AIMessage(content=answer))
+
+    # Show reasoning and response
+    with st.expander("Reasoning", expanded=False):
+        st.markdown(partial, unsafe_allow_html=True)
+
     st.chat_message("assistant", avatar="👩‍💻").markdown(answer)

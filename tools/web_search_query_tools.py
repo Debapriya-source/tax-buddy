@@ -1,6 +1,10 @@
+from langchain.tools import tool
+import concurrent.futures
 import requests
 from bs4 import BeautifulSoup
-from langchain.agents import tool
+from sentence_transformers import SentenceTransformer
+from sklearn.metrics.pairwise import cosine_similarity
+import json
 
 SITES = [
     "https://cleartax.in/s/long-term-capital-gains-ltcg-tax",
@@ -21,64 +25,88 @@ SITES = [
     "https://cleartax.in/s/other-income-sources",
 ]
 
+# ——— Load model once at import time onto CPU ———
+MODEL = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")
+
 
 @tool
-def search_tax_sites(q: str, max_hits: int = 3) -> str:
+def search_tax_websites(raw_input: str) -> str:
     """
-        Search each FAQ page for a query string from [
-        "ClearTax - Long-Term Capital Gains (LTCG) Tax Guide",
-        "Income Tax India - FAQs on Permanent Account Number (PAN)",
-        "Income Tax Department - e-Filing ITR-1 (Sahaj) FAQs",
-        "Income Tax Department - e-Filing ITR-2 FAQs",
-        "Department of Financial Services - Ministry of Finance (DFS portal)",
-        "Department of Public Enterprises - FAQs (DPE portal)",
-        "Ministry of Finance - Government of India (Home)",
-        "CBIC-GST - GST Frequently Asked Questions",
-        "CBIC-GST - New GST Registration FAQs & User Manual",
-        "Income Tax India - FAQs on Capital Gains",
-        "ClearTax - Income Tax Calculator",
-        "ClearTax - Salary Income Guide",
-        "ClearTax - House Property Income Guide",
-        "ClearTax - Capital Gains Income Guide",
-        "ClearTax - Income Tax for Freelancers Guide",
-        "ClearTax - Other Income Sources Guide",
-    ].
+    Search tax realted websites from govt. of India for a query.
+    raw_input: JSON-encoded string with keys:
+      - q (str): the query (required)
+      - max_hits (int): how many hits per site (default 3)
+      - context_lines (int): lines before/after a hit (default 3)
+      - max_chars (int): truncate each snippet to this many chars (default 500)
 
-          Args:
-            query: Substring to search for (case-insensitive).
-            context_lines: How many lines before/after a hit to include.
-
-          Returns:
-            A formatted string containing the search results with URLs and matching text snippets.
+    Example:
+      search_tax_sites('{"q":"LTCG rate","max_hits":2,"context_lines":2,"max_chars":300}')
     """
-    import concurrent.futures
+    # Parse arguments
+    try:
+        params = json.loads(raw_input)
+    except json.JSONDecodeError:
+        return (
+            "❌ Invalid input. Please pass a JSON string, e.g.: "
+            '{"q":"long-term capital gains","max_hits":2,"context_lines":2,"max_chars":300}'
+        )
 
-    print(f"Searching for '{q}' in tax sites...")
+    q = params.get("q", "").strip()
     if not q:
-        return "Query cannot be empty."
-    ql = q.lower()
+        return "❌ Query cannot be empty."
+
+    max_hits = int(params.get("max_hits", 3))
+    context_lines = int(params.get("context_lines", 3))
+    max_chars = int(params.get("max_chars", 500))
+
     results = []
 
     def search_url(url):
-        print(f"Searching {url}...")
         try:
-            txt = BeautifulSoup(
+            text = BeautifulSoup(
                 requests.get(url, timeout=5).text, "html.parser"
             ).get_text("\n")
-            hits = [line.strip() for line in txt.splitlines() if ql in line.lower()][
-                :max_hits
-            ]
-            if hits:
-                result = [f"\nURL: {url}"]
-                result.extend(f"- {hit}" for hit in hits)
-                return result
-        except Exception:
+            lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+
+            q_emb = MODEL.encode(q.lower())
+            txt_emb = MODEL.encode(lines)
+            sims = cosine_similarity([q_emb], txt_emb)[0]
+
+            # pick top hits
+            idxs = sims.argsort()[-max_hits:][::-1]
+            chunks = []
+            for i in idxs:
+                if sims[i] > 0.3:
+                    start = max(0, i - context_lines)
+                    end = min(len(lines), i + context_lines + 1)
+                    chunks.append(lines[start:end])
+
+            if chunks:
+                block = [f"\nURL: {url}"]
+                for chunk in chunks:
+                    snippet = "\n".join(chunk)
+                    # truncate
+                    if len(snippet) > max_chars:
+                        snippet = snippet[:max_chars].rsplit("\n", 1)[0] + "\n..."
+                    block.append(snippet)
+                return block
+
+        except Exception as e:
+            print(f"Error searching {url}: {e}")
             return None
-        return None
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-        for result in executor.map(search_url, SITES):
-            if result:
-                results.extend(result)
+        for res in executor.map(search_url, SITES):
+            if res:
+                results.extend(res)
 
     return "\n".join(results) if results else "No results found."
+
+
+if __name__ == "__main__":
+    query = "What is the long-term capital gains tax?"
+    print(
+        search_tax_websites(
+            '{"q":"long-term capital gains","max_hits":2,"context_lines":2,"max_chars":300}'
+        )
+    )

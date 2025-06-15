@@ -14,7 +14,7 @@ from tools.pdf_query_tools import (
     faqs_budget_2025_pdf_query,
     finance_bill_2025_pdf_query,
 )
-from tools.web_search_query_tools import search_tax_sites
+from tools.web_search_query_tools import search_tax_websites
 
 
 def fallback_chat(
@@ -47,11 +47,12 @@ def agent(query: str) -> tuple[str, str]:
     warnings.filterwarnings("ignore", category=FutureWarning)
 
     # — Primary LLM & tools setup —
-    llm = ChatGroq(model="qwen-qwq-32b")
+    # llm = ChatGroq(model="qwen-qwq-32b")
+    llm = ChatGroq(model="deepseek-r1-distill-llama-70b")
     tools = [
         faqs_budget_2025_pdf_query,
         finance_bill_2025_pdf_query,
-        search_tax_sites,
+        search_tax_websites,
     ]
     prompt = get_prompt_template()
     react_agent = create_react_agent(llm, tools, prompt)
@@ -63,7 +64,7 @@ def agent(query: str) -> tuple[str, str]:
         tools=tools,
         return_intermediate_steps=True,
         verbose=True,
-        handle_parsing_errors=True,
+        handle_parsing_errors="pass",
         early_stopping_method="force",  # force returns a string
         max_iterations=5,
         callback_manager=cb_manager,
