@@ -24,7 +24,7 @@ def get_prompt_template():
 
             Observation: the result of the action
 
-            ... (this Thought/Action/Action Input/Observation can repeat N times)
+            ... (this Thought/Action/Action Input/Observation can repeat 3 times)
 
             Thought: I now know the final answer
 

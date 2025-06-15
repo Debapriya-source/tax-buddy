@@ -28,7 +28,7 @@ def fallback_chat(
         {"role": "system", "content": f"Partial reasoning so far:\n{thoughts}"},
         {
             "role": "user",
-            "content": "Based on the above, give a final answer with proper reference(from the partial thoughts) and disclaimer. Do not include the raw thoughts or anything inside <think></think> tag, in the final response",
+            "content": "Based on the above, give a final answer with proper reference(from the partial thoughts) and disclaimer.",
         },
     ]
     try:

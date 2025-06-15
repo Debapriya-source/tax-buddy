@@ -23,7 +23,7 @@ SITES = [
 
 
 @tool
-def search_tax_sites(q: str, max_hits: int = 3) -> dict:
+def search_tax_sites(q: str, max_hits: int = 3) -> str:
     """
         Search each FAQ page for a query string from [
         "ClearTax - Long-Term Capital Gains (LTCG) Tax Guide",
@@ -44,16 +44,23 @@ def search_tax_sites(q: str, max_hits: int = 3) -> dict:
         "ClearTax - Other Income Sources Guide",
     ].
 
-        Args:
-          query: Substring to search for (case-insensitive).
-          context_lines: How many lines before/after a hit to include.
+          Args:
+            query: Substring to search for (case-insensitive).
+            context_lines: How many lines before/after a hit to include.
 
-        Returns:
-          A dict mapping URL -> list of matching text snippets.
+          Returns:
+            A formatted string containing the search results with URLs and matching text snippets.
     """
+    import concurrent.futures
+
+    print(f"Searching for '{q}' in tax sites...")
+    if not q:
+        return "Query cannot be empty."
     ql = q.lower()
-    out = {}
-    for url in SITES:
+    results = []
+
+    def search_url(url):
+        print(f"Searching {url}...")
         try:
             txt = BeautifulSoup(
                 requests.get(url, timeout=5).text, "html.parser"
@@ -62,7 +69,16 @@ def search_tax_sites(q: str, max_hits: int = 3) -> dict:
                 :max_hits
             ]
             if hits:
-                out[url] = hits
-        except:
-            continue
-    return out
+                result = [f"\nURL: {url}"]
+                result.extend(f"- {hit}" for hit in hits)
+                return result
+        except Exception:
+            return None
+        return None
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        for result in executor.map(search_url, SITES):
+            if result:
+                results.extend(result)
+
+    return "\n".join(results) if results else "No results found."

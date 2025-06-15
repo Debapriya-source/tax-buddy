@@ -3,7 +3,6 @@ import os
 
 
 from langchain_core.messages import HumanMessage, AIMessage
-import os
 from dotenv import dotenv_values
 import streamlit as st
 import streamlit.components.v1 as components
@@ -83,7 +82,7 @@ if prompt := st.chat_input("What is your query?"):
     print(f"enhanced_queries: {enhanced_queries}")
 
     # Store the user message and enhanced queries
-    final_user_query = f"Please use proper quotations (such as any section no. or specific lines etc.) from the PDFs when crafting your answer (references should be strictly from the PDFs only). Add a proper disclaimer. prompt: {prompt}\n\nenhanced_queries: {enhanced_queries}.\n\nNOTE: Do not include anything in final response, from inside the <think></think> section"
+    final_user_query = f"Please use proper quotations (such as any section no. or specific lines etc.) from the PDFs when crafting your answer (references should be strictly from the PDFs only). Add a proper disclaimer. prompt: {prompt}\n\nenhanced_queries: {enhanced_queries}."
     user_message = HumanMessage(content=final_user_query)
     store.append(HumanMessage(content=prompt))
 
@@ -113,16 +112,8 @@ if prompt := st.chat_input("What is your query?"):
                 margin-top: 0.5em;
             }
             </style>
-            """,
-            unsafe_allow_html=True,
-        )
-        # 2) Render the reasoning blob as Markdown inside a container div
-        st.markdown(
-            f"""
-            <div class="md-container">
-            {partial}
-            </div>
-            """,
+            """
+            + partial,
             unsafe_allow_html=True,
         )
 
