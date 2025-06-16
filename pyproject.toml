@@ -1,7 +1,7 @@
 [project]
-name = "nyaya-gpt"
+name = "tax-buddy"
 version = "0.1.0"
-description = "Add your description here"
+description = "Indian tax realated qna chatbot"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
